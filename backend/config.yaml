@@ -1,0 +1,183 @@
+# VARUN-FUSION Operational Configuration
+# Smart India Hackathon 2026 - Problem Statement 26081 (MoES)
+# Team CodeX_2026 (Team ID 159951)
+
+system:
+  name: "VARUN-FUSION"
+  version: "1.0.0"
+  tagline: "Adaptive AI-NWP Multi-Model Forecast Blending System for India"
+  disclaimer: "Forecaster guidance — not a public warning"
+  timezone: "Asia/Kolkata"
+  imd_day_cutoff_utc: 3  # 03:00 UTC (08:30 IST)
+
+domain:
+  name: "East India / Odisha Coast"
+  lat_min: 17.0
+  lat_max: 24.0
+  lon_min: 81.0
+  lon_max: 90.0
+  grid_resolution: 0.25
+  subregions:
+    coastal:
+      name: "Coastal Belt"
+      description: "Odisha coastal plain, Gangetic WB coast, and North Coastal AP"
+      color: "#06B6D4"
+      # Polygon coordinates [lon, lat]
+      polygon:
+        - [84.5, 17.0]
+        - [87.5, 21.5]
+        - [89.5, 22.5]
+        - [89.5, 21.0]
+        - [86.5, 18.5]
+        - [84.5, 17.0]
+    inland:
+      name: "Inland Plains"
+      description: "Interior Odisha, southern Jharkhand, and eastern Chhattisgarh"
+      color: "#10B981"
+      polygon:
+        - [81.0, 18.5]
+        - [84.5, 18.5]
+        - [86.0, 21.5]
+        - [85.5, 24.0]
+        - [82.5, 24.0]
+        - [81.0, 21.0]
+        - [81.0, 18.5]
+    hills:
+      name: "Eastern Ghats / Highlands"
+      description: "Mayurbhanj, Similipal, and Eastern Ghats plateau"
+      color: "#F59E0B"
+      polygon:
+        - [82.5, 17.0]
+        - [84.5, 17.0]
+        - [85.0, 19.5]
+        - [83.0, 19.5]
+        - [82.5, 17.0]
+
+variables:
+  rain24_mm:
+    name: "24h Cumulative Rainfall"
+    unit: "mm"
+    display_name: "24h Rainfall"
+    cmap: "YlGnBu"
+    scale_min: 0.0
+    scale_max: 150.0
+    aggregation: "sum_24h"
+  t2m_max_c:
+    name: "2m Maximum Temperature"
+    unit: "°C"
+    display_name: "Max Temperature"
+    cmap: "YlOrRd"
+    scale_min: 20.0
+    scale_max: 45.0
+    aggregation: "max_24h"
+  t2m_mean_c:
+    name: "2m Mean Temperature"
+    unit: "°C"
+    display_name: "Mean Temperature"
+    cmap: "Spectral_r"
+    scale_min: 15.0
+    scale_max: 40.0
+    aggregation: "mean_24h"
+  ws10_ms:
+    name: "10m Wind Speed"
+    unit: "m/s"
+    display_name: "Wind Speed"
+    cmap: "Viridis"
+    scale_min: 0.0
+    scale_max: 30.0
+    aggregation: "max_24h"
+
+lead_times_hours: [24, 48, 72, 96, 120]
+
+thresholds:
+  rain:
+    moderate: 15.6      # IMD Moderate rainfall
+    heavy: 64.5         # IMD Heavy rainfall (Alert trigger)
+    very_heavy: 115.6   # IMD Very Heavy rainfall
+    extremely_heavy: 204.4 # IMD Extremely Heavy rainfall
+  t2m_max:
+    warm: 37.0
+    heatwave: 40.0      # Plains heatwave threshold
+    severe_heatwave: 44.0
+  ws10:
+    moderate: 8.5
+    squall: 14.0        # Squally weather (Beaufort 7)
+    gale: 20.5          # Gale winds (Beaufort 8-9)
+
+sources:
+  ecmwf_ifs:
+    id: "ecmwf_ifs"
+    name: "ECMWF IFS (0.25°)"
+    kind: "nwp"
+    color: "#3B82F6"
+    license: "CC-BY 4.0"
+    native_resolution: 0.25
+    enabled: true
+  ecmwf_aifs:
+    id: "ecmwf_aifs"
+    name: "ECMWF AIFS (0.25°)"
+    kind: "ai"
+    color: "#A855F7"
+    license: "CC-BY 4.0"
+    native_resolution: 0.25
+    enabled: true
+  noaa_gfs:
+    id: "noaa_gfs"
+    name: "NOAA GFS (0.25°)"
+    kind: "nwp"
+    color: "#06B6D4"
+    license: "Open / US-Gov Public Domain"
+    native_resolution: 0.25
+    enabled: true
+  ncmrwf:
+    id: "ncmrwf"
+    name: "NCMRWF NCUM/NEPS"
+    kind: "nwp"
+    color: "#1F3864"
+    license: "MoES Internal / Research"
+    native_resolution: 0.25
+    enabled: true
+
+truth:
+  primary_temperature: "era5"
+  primary_wind: "era5"
+  primary_rain: "imd_rain"
+  fallback: "open_meteo_archive"
+
+skill:
+  rolling_window_days: 30
+  fallback_window_days: 90
+  min_samples_required: 7
+  fss_scales_cells: [1, 3, 5, 9]
+
+blending:
+  default_method: "adaptive"
+  methods:
+    - "best_single"
+    - "equal"
+    - "inverse_error"
+    - "adaptive"
+  p_inverse_error: 2.0
+  epsilon_inverse_error: 0.01
+  constraints:
+    weight_floor: 0.05
+    weight_cap: 0.80
+  ml_gate:
+    temperature_tau: 1.0
+    n_estimators: 100
+    learning_rate: 0.05
+  confidence:
+    weights:
+      spread: 0.35
+      entropy: 0.25
+      recent_skill: 0.25
+      completeness: 0.15
+    thresholds:
+      high: 0.70
+      medium: 0.40
+
+storage:
+  db_url: "sqlite:///./data/varun_fusion.db"
+  zarr_root: "./data/harmonized"
+  samples_dir: "./data/samples"
+  reports_dir: "./data/reports"
